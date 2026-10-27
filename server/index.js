@@ -30,6 +30,9 @@ function rateLimit(key, limit, windowMs) {
   return bucket.count <= limit;
 }
 function auditLog(event, details) { console.log(JSON.stringify({ ts: Date.now(), event, ...details })); }
+function isSafePath(p) { return typeof p === 'string' && !p.includes('..') && !/[<>:"|?*]/.test(p) && p.length <= 260; }
+function validTelemetry(t) { return t && typeof t === 'object' && !Array.isArray(t) && Object.keys(t).length <= 20; }
+
 
 let db;
 
@@ -191,6 +194,8 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'session_error', error: 'No active approved session' }));
             break;
           }
+          if (message.type === 'telemetry' && !validTelemetry(message.payload)) { auditLog('relay_denied', { from: ws.deviceId, to: targetDeviceId, reason: 'invalid_telemetry' }); ws.send(JSON.stringify({ type: 'session_error', error: 'Invalid telemetry payload' })); break; }
+          if ((message.type === 'file_transfer' || message.type === 'file_chunk') && message.payload && !isSafePath(message.payload.path || '')) { auditLog('relay_denied', { from: ws.deviceId, to: targetDeviceId, reason: 'unsafe_path' }); ws.send(JSON.stringify({ type: 'session_error', error: 'Invalid file path' })); break; }
           const targetClient = Array.from(clients.entries()).find(([_, c]) => c.deviceId === targetDeviceId);
           
           if (targetClient) {
