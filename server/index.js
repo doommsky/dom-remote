@@ -183,6 +183,7 @@ wss.on('connection', (ws, req) => {
           const targetDeviceId = message.targetDeviceId;
           const session = await db.get("SELECT * FROM sessions WHERE status = 'active' AND ((host_device_id = ? AND client_device_id = ?) OR (host_device_id = ? AND client_device_id = ?))", [ws.deviceId, targetDeviceId, targetDeviceId, ws.deviceId]);
           if (!session) {
+            auditLog('relay_denied', { from: ws.deviceId, to: targetDeviceId, reason: 'no_active_session' });
             ws.send(JSON.stringify({ type: 'session_error', error: 'No active approved session' }));
             break;
           }
@@ -616,5 +617,4 @@ process.on('SIGINT', async () => {
   if (db) await db.close();
   server.close(() => process.exit(0));
 });
-
 
