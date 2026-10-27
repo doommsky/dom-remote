@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { onTransferProgress, onTransferComplete, onTransferError, onTransferCancelled, cancelFileTransfer } from '../lib/fileTransfer.js';
+import { onTransferProgress, onTransferComplete, onTransferError, onTransferCancelled, cancelFileTransfer } from '../../lib/fileTransfer.js';
 
 export default function FileTransferPanel({ transferId, filename, size }) {
   const [status, setStatus] = useState('requested');
@@ -28,4 +28,3 @@ export default function FileTransferPanel({ transferId, filename, size }) {
     </section>
   );
 }
-EOF
