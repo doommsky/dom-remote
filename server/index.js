@@ -617,5 +617,3 @@ process.on('SIGINT', async () => {
   if (db) await db.close();
   server.close(() => process.exit(0));
 });
-
-
