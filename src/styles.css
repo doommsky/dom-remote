@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg: #080D19;
+  --surface: #0C1322;
+  --raised: #151B2D;
+  --control: #1A2135;
+  --border: #293650;
+  --purple: #A855F7;
+  --bright-violet: #C084FC;
+  --lavender: #B99AFF;
+  --blue: #3B82F6;
+  --green: #39F59B;
+  --amber: #F59E0B;
+  --red: #FF334D;
+  --text: #F4F5FF;
+  --text-secondary: #C0C9DB;
+  --grey: #8E9AB2;
+  --font: 'Inter', system-ui, sans-serif;
+  --radius: 16px;
+  --shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font-family: inherit;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+::selection {
+  background-color: var(--purple);
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--grey);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--purple);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}

@@ -1,0 +1,248 @@
+// DOM Remote - Premium Dark CSS
+// Style A: Premium Dark - deep navy and near-black, electric purple accents
+
+:root {
+  --color-background-primary: #0B0D18;
+  --color-background-secondary: #171B2A;
+  --color-background-tertiary: rgba(128, 128, 128, 0.15);
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #6B7280;
+  --color-text-inverse: #0B0D18;
+  --color-text-danger: #EF4444;
+  --color-border-primary: rgba(128, 128, 128, 0.3);
+  --color-border-info: #4ADE80;
+  --color-background-inverse: #F8FAFC;
+  --color-background-danger: rgba(239, 68, 68, 0.08);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'system-ui', sans-serif;
+}
+
+.app {
+  box-sizing: border-box;
+  container-type: inline-size;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  color: var(--color-text-primary, #F8FAFC);
+  background: var(--color-background-primary, #0B0D18);
+  font: 13px/1.5 var(--font-sans, system-ui, sans-serif);
+}
+
+.app *,
+.app *::before,
+.app *::after {
+  box-sizing: border-box;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.field {
+  display: grid;
+  flex: 1 1 140px;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field > span,
+.meta,
+th,
+dt {
+  color: var(--color-text-secondary, #6B7280);
+  font-size: 12px;
+}
+
+.check {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+input,
+select,
+button {
+  min-height: 32px;
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border-primary, rgba(128, 128, 128, 0.35));
+  background: var(--color-background-primary, #171B2A);
+}
+
+.check input {
+  width: auto;
+  min-height: 0;
+}
+
+button {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border-primary, rgba(128, 128, 128, 0.35));
+  background: var(--color-background-secondary, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button.primary {
+  border-color: transparent;
+  background: var(--color-background-inverse, #F8FAFC);
+  color: var(--color-text-inverse, #0B0D18);
+  font-weight: 500;
+}
+
+button.link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-border-info, #4ADE80);
+  outline-offset: 1px;
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-background-secondary, rgba(128, 128, 128, 0.08));
+}
+
+.notice[data-tone="danger"] {
+  color: var(--color-text-danger, #EF4444);
+  background: var(--color-background-danger, rgba(128, 128, 128, 0.08));
+}
+
+.notice button {
+  margin-left: 6px;
+}
+
+.meta {
+  margin: 0;
+}
+
+.focal {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.result,
+.outcome {
+  display: grid;
+  gap: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+}
+
+th {
+  padding: 0 8px 4px 0;
+  font-weight: 500;
+  text-align: left;
+}
+
+td {
+  padding: 6px 8px 6px 0;
+  border-top: 1px solid var(--color-border-primary, rgba(128, 128, 128, 0.2));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.facts div {
+  display: contents;
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.skeleton {
+  display: grid;
+  gap: 8px;
+}
+
+.skeleton-row {
+  height: 14px;
+  border-radius: 4px;
+  background: var(--color-background-tertiary, rgba(128, 128, 128, 0.15));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button {
+    transition: opacity 150ms ease-out, background-color 150ms ease-out;
+  }
+}
+
+@container (max-width: 380px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .field {
+    flex-basis: auto;
+  }
+  .controls button.primary {
+    width: 100%;
+  }
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .facts dd {
+    margin-bottom: 6px;
+  }
+}

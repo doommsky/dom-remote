@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "workspace": {
+    "name": "OpenWork Chat",
+    "createdAt": 1792993575562,
+    "preset": "starter"
+  },
+  "authorizedRoots": [
+    "C:\\Users\\DOOM98\\OpenWork Chat"
+  ],
+  "reload": null
+}

@@ -1,0 +1,22 @@
+{
+  "name": "dom-os-signaling",
+  "version": "1.0.0",
+  "description": "DOM-OS Signaling Server with Auth & Device Registry",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "sqlite3": "^5.1.7",
+    "sqlite": "^5.1.1",
+    "uuid": "^9.0.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "dotenv": "^16.4.5"
+  }
+}

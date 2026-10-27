@@ -1,0 +1,6 @@
+Database initialized
+DOM-OS Signaling Server running on port 3001
+HTTP API: http://localhost:3001
+WebSocket: ws://localhost:3001
+New WebSocket connection
+Device disconnected: 80fcb3c5-46bf-4757-9580-583b7c7a5b07
