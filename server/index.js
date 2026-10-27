@@ -12,13 +12,22 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'dom-os-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? (console.error('JWT_SECRET required') , process.exit(1)) : 'dom-os-dev-secret-change-in-production');
 const JWT_EXPIRY = '30d';
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',') }));
+app.use(express.json({ limit: '1mb' }));
 
+const rateBuckets = new Map();
+function rateLimit(key, limit, windowMs) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key) || { count: 0, reset: now + windowMs };
+  if (now > bucket.reset) { bucket.count = 0; bucket.reset = now + windowMs; }
+  bucket.count += 1;
+  rateBuckets.set(key, bucket);
+  return bucket.count <= limit;
+}
 let db;
 
 async function initDatabase() {
@@ -88,7 +97,7 @@ function verifyToken(token) {
 }
 
 const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, verifyClient: (info) => { const allowed = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(','); const origin = info.origin || info.req.headers.origin; return !origin || allowed.includes(origin); } });
 
 const clients = new Map(); // ws -> { userId, deviceId, deviceType, authenticated }
 
@@ -371,10 +380,14 @@ wss.on('connection', (ws, req) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
+  if (!rateLimit('reg:' + (req.ip || 'x'), 5, 60000)) return res.status(429).json({ error: 'Too many requests' });
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+    const { email, password } = req.body || {};
+    if (typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Invalid email' });
+    }
+    if (typeof password !== 'string' || password.length < 12) {
+      return res.status(400).json({ error: 'Password must be at least 12 characters' });
     }
 
     const existing = await db.get('SELECT id FROM users WHERE email = ?', [email]);
@@ -397,10 +410,11 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  if (!rateLimit('login:' + (req.ip || 'x'), 10, 60000)) return res.status(429).json({ error: 'Too many requests' });
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+    const { email, password } = req.body || {};
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
 
     const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
@@ -448,9 +462,15 @@ app.post('/api/devices/register', async (req, res) => {
     return res.status(401).json({ error: 'Invalid token' });
   }
 
-  const { name, type, platform, publicKey } = req.body;
-  if (!name || !type || !platform) {
-    return res.status(400).json({ error: 'Name, type, and platform required' });
+  const { name, type, platform, publicKey } = req.body || {};
+  if (typeof name !== 'string' || name.length === 0 || name.length > 100) {
+    return res.status(400).json({ error: 'Invalid device name' });
+  }
+  if (typeof type !== 'string' || !['desktop','mobile','tablet'].includes(type)) {
+    return res.status(400).json({ error: 'Invalid device type' });
+  }
+  if (typeof platform !== 'string' || platform.length === 0 || platform.length > 100) {
+    return res.status(400).json({ error: 'Invalid platform' });
   }
 
   const deviceId = uuidv4();
@@ -586,3 +606,7 @@ process.on('SIGINT', async () => {
   if (db) await db.close();
   server.close(() => process.exit(0));
 });
+
+
+
+
