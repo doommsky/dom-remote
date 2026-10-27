@@ -35,8 +35,7 @@
     "concurrently": "^8.2.0",
     "wait-on": "^7.0.0",
     "@capacitor/cli": "^6.0.0",
-    "vitest": "^2.1.9",
-    "supertest": "^7.0.0"
+    "vitest": "^2.1.9"
   },
   "build": {
     "appId": "com.domremote.app",
