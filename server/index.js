@@ -25,9 +25,12 @@ function rateLimit(key, limit, windowMs) {
   const bucket = rateBuckets.get(key) || { count: 0, reset: now + windowMs };
   if (now > bucket.reset) { bucket.count = 0; bucket.reset = now + windowMs; }
   bucket.count += 1;
+  if (rateBuckets.size > 1000) { const oldest = rateBuckets.keys().next().value; rateBuckets.delete(oldest); }
   rateBuckets.set(key, bucket);
   return bucket.count <= limit;
 }
+function auditLog(event, details) { console.log(JSON.stringify({ ts: Date.now(), event, ...details })); }
+
 let db;
 
 async function initDatabase() {
@@ -225,6 +228,7 @@ wss.on('connection', (ws, req) => {
             clientName: (await db.get('SELECT name FROM devices WHERE id = ?', [ws.deviceId]))?.name
           });
 
+          auditLog('session_requested', { sessionId, hostDeviceId: message.hostDeviceId, clientDeviceId: ws.deviceId });
           ws.send(JSON.stringify({ type: 'session_pending', sessionId }));
           break;
         }
@@ -237,6 +241,7 @@ wss.on('connection', (ws, req) => {
           if (session && session.status === 'pending') {
             await db.run('UPDATE sessions SET status = ? WHERE id = ?', ['active', message.sessionId]);
             
+            auditLog('session_approved', { sessionId: message.sessionId, hostDeviceId: ws.deviceId });
             broadcastToDevice(session.client_device_id, {
               type: 'session_accepted',
               sessionId: message.sessionId,
@@ -611,4 +616,5 @@ process.on('SIGINT', async () => {
   if (db) await db.close();
   server.close(() => process.exit(0));
 });
+
 
