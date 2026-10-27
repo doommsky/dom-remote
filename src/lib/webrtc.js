@@ -1,7 +1,7 @@
 const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || 'ws://localhost:3001';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-const ICE_SERVERS = [
+export const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
