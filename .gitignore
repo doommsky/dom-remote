@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-electron/
+.env
+.env.local
+*.log
+*.exe
+*.blockmap
+*.asar
+REVIEW.md
+diag-*.ps1
+find-*.ps1
+
