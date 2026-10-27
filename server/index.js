@@ -7,6 +7,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import { v4 as uuidv4 } from 'uuid';
 import cors from 'cors';
+import * as FT from './fileTransfer.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -30,6 +31,11 @@ function rateLimit(key, limit, windowMs) {
   return bucket.count <= limit;
 }
 function auditLog(event, details) { console.log(JSON.stringify({ ts: Date.now(), event, ...details })); }
+const transfers = new Map();
+function safeName(n){ return typeof n==='string' && n.length>0 && n.length<=255 && !n.includes('..') && !/[<>:"|?*\\]/.test(n); }
+function isSafePath(p) { return typeof p === 'string' && !p.includes('..') && !/[<>:"|?*]/.test(p) && p.length <= 260; }
+function validTelemetry(t) { return t && typeof t === 'object' && !Array.isArray(t) && Object.keys(t).length <= 20; }
+
 
 let db;
 
@@ -177,7 +183,11 @@ wss.on('connection', (ws, req) => {
 
         case 'offer':
         case 'answer':
-        case 'ice-candidate': {
+        case 'ice-candidate':
+        case 'telemetry':
+        case 'file_transfer':
+        case 'file_chunk':
+        case 'file_cancel': {
           if (!ws.authenticated) break;
           
           const targetDeviceId = message.targetDeviceId;
@@ -187,6 +197,8 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'session_error', error: 'No active approved session' }));
             break;
           }
+          if (message.type === 'telemetry' && !validTelemetry(message.payload)) { auditLog('relay_denied', { from: ws.deviceId, to: targetDeviceId, reason: 'invalid_telemetry' }); ws.send(JSON.stringify({ type: 'session_error', error: 'Invalid telemetry payload' })); break; }
+          if ((message.type === 'file_transfer' || message.type === 'file_chunk') && message.payload && !isSafePath(message.payload.path || '')) { auditLog('relay_denied', { from: ws.deviceId, to: targetDeviceId, reason: 'unsafe_path' }); ws.send(JSON.stringify({ type: 'session_error', error: 'Invalid file path' })); break; }
           const targetClient = Array.from(clients.entries()).find(([_, c]) => c.deviceId === targetDeviceId);
           
           if (targetClient) {
@@ -360,6 +372,85 @@ wss.on('connection', (ws, req) => {
           break;
         }
 
+        case 'file_transfer_request': {
+          if (!ws.authenticated) break;
+          const t = message;
+          if (!t.transferId || transfers.has(t.transferId)) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: t.transferId, error: 'invalid_or_duplicate_transfer' })); break; }
+          if (!safeName(t.filename)) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: t.transferId, error: 'unsafe_filename' })); break; }
+          if (typeof t.size !== 'number' || t.size < 0 || t.size > 10*1024*1024) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: t.transferId, error: 'oversized_file' })); break; }
+          if (typeof t.totalChunks !== 'number' || t.totalChunks < 1) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: t.transferId, error: 'invalid_chunks' })); break; }
+          const session = await db.get("SELECT * FROM sessions WHERE status = 'active' AND ((host_device_id = ? AND client_device_id = ?) OR (host_device_id = ? AND client_device_id = ?))", [ws.deviceId, t.recipientDeviceId, t.recipientDeviceId, ws.deviceId]);
+          if (!session) { auditLog('relay_denied', { from: ws.deviceId, to: t.recipientDeviceId, reason: 'no_active_session' }); ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: t.transferId, error: 'No active approved session' })); break; }
+          transfers.set(t.transferId, { transferId: t.transferId, sessionId: t.sessionId, sender: ws.deviceId, recipient: t.recipientDeviceId, filename: t.filename, size: t.size, totalChunks: t.totalChunks, checksum: t.checksum, status: 'pending_consent', received: new Set(), cancelled: false });
+          const targetClient = Array.from(clients.entries()).find(([_, c]) => c.deviceId === t.recipientDeviceId);
+          if (targetClient) { const [tw] = targetClient; if (tw.readyState === 1) tw.send(JSON.stringify({ type: 'file_transfer_request', transferId: t.transferId, sessionId: t.sessionId, senderDeviceId: ws.deviceId, recipientDeviceId: t.recipientDeviceId, filename: t.filename, size: t.size, totalChunks: t.totalChunks, checksum: t.checksum })); }
+          break;
+        }
+        case 'file_transfer_consent': {
+          if (!ws.authenticated) break;
+          const tr = transfers.get(message.transferId);
+          if (!tr || tr.recipient !== ws.deviceId || tr.status !== 'pending_consent') { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: message.transferId, error: 'invalid_transfer' })); break; }
+          tr.status = 'transferring';
+          const senderClient = Array.from(clients.entries()).find(([_, c]) => c.deviceId === tr.sender);
+          if (senderClient) { const [sw] = senderClient; if (sw.readyState === 1) sw.send(JSON.stringify({ type: 'file_transfer_consent', transferId: tr.transferId })); }
+          break;
+        }
+        case 'file_transfer_reject': {
+          if (!ws.authenticated) break;
+          const tr = transfers.get(message.transferId);
+          if (!tr) break;
+          tr.status = 'rejected';
+          transfers.delete(tr.transferId);
+          const senderClient = Array.from(clients.entries()).find(([_, c]) => c.deviceId === tr.sender);
+          if (senderClient) { const [sw] = senderClient; if (sw.readyState === 1) sw.send(JSON.stringify({ type: 'file_transfer_reject', transferId: tr.transferId })); }
+          break;
+        }
+        case 'file_chunk': {
+          if (!ws.authenticated) break;
+          const tr = transfers.get(message.transferId);
+          if (!tr || tr.sender !== ws.deviceId || tr.status !== 'transferring' || tr.cancelled) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: message.transferId, error: 'invalid_transfer_state' })); break; }
+          const seq = message.sequence;
+          if (typeof seq !== 'number' || seq < 0 || seq >= tr.totalChunks) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: message.transferId, error: 'invalid_sequence' })); break; }
+          if (tr.received.has(seq)) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: message.transferId, error: 'duplicate_chunk' })); break; }
+          // out-of-order check: expect next not-yet-received in order
+          if (seq !== tr.received.size) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: message.transferId, error: 'out_of_order' })); break; }
+          const payload = message.payload || '';
+          if (typeof payload !== 'string' || payload.length > 65536) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: message.transferId, error: 'oversized_chunk' })); break; }
+          tr.received.add(seq);
+          const recipientClient = Array.from(clients.entries()).find(([_, c]) => c.deviceId === tr.recipient);
+          if (recipientClient) { const [rw] = recipientClient; if (rw.readyState === 1) rw.send(JSON.stringify({ type: 'file_chunk', transferId: tr.transferId, sequence: seq, totalChunks: tr.totalChunks, payload, isFinal: !!message.isFinal })); }
+          const progress = Math.round((tr.received.size / tr.totalChunks) * 100);
+          const target = Array.from(clients.entries()).find(([_, c]) => c.deviceId === tr.recipient);
+          if (target) { const [tw] = target; if (tw.readyState === 1) tw.send(JSON.stringify({ type: 'file_transfer_progress', transferId: tr.transferId, progress, transferredChunks: tr.received.size, totalChunks: tr.totalChunks })); }
+          if (message.isFinal) {
+            // checksum verification (client-provided expected vs received marker)
+            if (message.checksum && message.checksum !== tr.checksum) {
+              tr.status = 'failed';
+              transfers.delete(tr.transferId);
+              ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: tr.transferId, error: 'checksum_mismatch' }));
+              break;
+            }
+            tr.status = 'completed';
+            transfers.delete(tr.transferId);
+            if (recipientClient) { const [rw] = recipientClient; if (rw.readyState === 1) rw.send(JSON.stringify({ type: 'file_transfer_complete', transferId: tr.transferId })); }
+            ws.send(JSON.stringify({ type: 'file_transfer_complete', transferId: tr.transferId }));
+          }
+          break;
+        }
+        case 'file_transfer_cancel': {
+          if (!ws.authenticated) break;
+          const tr = transfers.get(message.transferId);
+          if (!tr) break;
+          if (ws.deviceId !== tr.sender && ws.deviceId !== tr.recipient) { ws.send(JSON.stringify({ type: 'file_transfer_error', transferId: message.transferId, error: 'unauthorized' })); break; }
+          tr.cancelled = true;
+          tr.status = 'cancelled';
+          transfers.delete(tr.transferId);
+          [tr.sender, tr.recipient].forEach((dev) => {
+            const c = Array.from(clients.entries()).find(([_, x]) => x.deviceId === dev);
+            if (c) { const [w] = c; if (w.readyState === 1) w.send(JSON.stringify({ type: 'file_transfer_cancel', transferId: tr.transferId })); }
+          });
+          break;
+        }
         case 'ping': {
           ws.send(JSON.stringify({ type: 'pong' }));
           break;
