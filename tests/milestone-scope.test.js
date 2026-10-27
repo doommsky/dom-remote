@@ -54,3 +54,9 @@ describe('milestone scope', () => {
     ws1.close(); ws2.close();
   });
 });
+
+describe('file transfer extra', () => {
+  it('placeholder transfer check', () => {
+    expect(true).toBe(true);
+  });
+});
