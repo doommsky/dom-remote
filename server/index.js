@@ -680,7 +680,9 @@ app.delete('/api/devices/:id', async (req, res) => {
     return res.status(404).json({ error: 'Device not found' });
   }
 
+  await db.run('UPDATE sessions SET status = "cancelled", ended_at = ? WHERE host_device_id = ? OR client_device_id = ?', [Date.now(), req.params.id, req.params.id]);
   await db.run('DELETE FROM devices WHERE id = ?', [req.params.id]);
+  auditLog('device_deleted', { userId: decoded.userId, deviceId: req.params.id });
   res.json({ success: true });
 });
 
