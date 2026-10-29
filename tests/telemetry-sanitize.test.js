@@ -23,4 +23,9 @@ describe('telemetry sanitize', () => {
     expect(sanitizeTelemetry([1, 2])).toEqual({});
     expect(sanitizeTelemetry('str')).toEqual({});
   });
+  it('oversize payload rejected', () => {
+    const big = { cpu: 1, data: 'x'.repeat(5000) };
+    const out = sanitizeTelemetry(big);
+    expect(out).toEqual({});
+  });
 });
