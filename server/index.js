@@ -758,6 +758,19 @@ app.post('/api/auth/logout', async (req, res) => {
   if (!decoded) {
     return res.status(401).json({ error: 'Invalid token' });
   }
+  const { refreshToken } = req.body || {};
+  if (typeof refreshToken === 'string') {
+    await revokeRefreshToken(db, refreshToken);
+  }
+  await db.run('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?', [decoded.userId]);
+
+  const devices = await db.all('SELECT id FROM devices WHERE user_id = ?', [decoded.userId]);
+  const deviceIds = devices.map((d) => d.id);
+  if (deviceIds.length > 0) {
+    const placeholders = deviceIds.map(() => '?').join(',');
+    await db.run(`UPDATE sessions SET status = 'cancelled', ended_at = ? WHERE (host_device_id IN (${placeholders}) OR client_device_id IN (${placeholders})) AND status = 'active'`, [Date.now(), ...deviceIds, ...deviceIds]);
+  }
+
   auditLog('logout', { userId: decoded.userId });
   res.json({ success: true });
 });

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn } from 'node:child_process';
+import { open } from '../server/node_modules/sqlite/build/index.js';
+import sqlite3 from '../server/node_modules/sqlite3/lib/sqlite3.js';
 
 describe('token refresh and logout', () => {
   let proc;
@@ -46,11 +48,19 @@ describe('token refresh and logout', () => {
     expect(r.status).toBe(400);
   });
 
-  it('logout revokes session', async () => {
+  it('logout revokes refresh token', async () => {
     const email = 'tr4' + Date.now() + '@t.com';
     const r = await fetch('http://localhost:' + port + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'password123456' }) });
     const j = await r.json();
-    const r2 = await fetch('http://localhost:' + port + '/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + j.token } });
+    const db = await open({ filename: 'dom-os.db', driver: sqlite3.Database });
+    const before = await db.get('SELECT revoked FROM refresh_tokens WHERE token_hash = ?', [ (await import('node:crypto')).createHash('sha256').update(j.refreshToken).digest('hex') ]);
+    expect(before.revoked).toBe(0);
+    const r2 = await fetch('http://localhost:' + port + '/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + j.token }, body: JSON.stringify({ refreshToken: j.refreshToken }) });
     expect(r2.status).toBe(200);
+    const after = await db.get('SELECT revoked FROM refresh_tokens WHERE token_hash = ?', [ (await import('node:crypto')).createHash('sha256').update(j.refreshToken).digest('hex') ]);
+    expect(after.revoked).toBe(1);
+    const r3 = await fetch('http://localhost:' + port + '/api/auth/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: j.refreshToken }) });
+    expect(r3.status).toBe(401);
+    await db.close();
   });
 });
