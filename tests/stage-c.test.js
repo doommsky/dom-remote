@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn } from 'node:child_process';
 import { WebSocket } from '../server/node_modules/ws/index.js';
 
-describe('e2e stage C', () => {
+describe('e2e stage C and D', () => {
   let proc;
   const port = 3113;
   beforeAll(async () => {
@@ -42,11 +42,11 @@ describe('e2e stage C', () => {
     const wsB = await connectWs(token, b.deviceId);
     let sessionId;
     await new Promise((resolve) => {
-      wsA.on('message', (data) => { console.log('A recv:', data.toString().slice(0,120));
+      wsA.on('message', (data) => {
         const m = JSON.parse(data.toString());
         if (m.type === 'incoming_session') wsA.send(JSON.stringify({ type: 'session_accept', sessionId: m.sessionId }));
       });
-      wsB.on('message', (data) => { console.log('B recv:', data.toString().slice(0,120));
+      wsB.on('message', (data) => {
         const m = JSON.parse(data.toString());
         if (m.type === 'session_pending') sessionId = m.sessionId;
         if (m.type === 'session_accepted') resolve();
@@ -63,18 +63,19 @@ describe('e2e stage C', () => {
     const chunks = ['AAA', 'BBB', 'CCC'];
     const transferId = 'fc-' + Date.now();
     const received = [];
+    const receivedPayloads = [];
     const progress = [];
     const completes = [];
-    wsA.on('message', (data) => { console.log('A recv:', data.toString().slice(0,120));
+    wsA.on('message', (data) => {
       const m = JSON.parse(data.toString());
       if (m.type === 'file_transfer_request') {
         wsA.send(JSON.stringify({ type: 'file_transfer_consent', transferId: m.transferId }));
       }
-      if (m.type === 'file_chunk') received.push(m.sequence);
+      if (m.type === 'file_chunk') { received.push(m.sequence); receivedPayloads[m.sequence] = m.payload; }
       if (m.type === 'file_transfer_progress') progress.push(m.progress);
       if (m.type === 'file_transfer_complete') completes.push(m.transferId);
     });
-    wsB.on('message', (data) => { console.log('B recv:', data.toString().slice(0,120));
+    wsB.on('message', (data) => {
       const m = JSON.parse(data.toString());
       if (m.type === 'file_transfer_consent') {
         chunks.forEach((c, i) => {
@@ -89,6 +90,39 @@ describe('e2e stage C', () => {
     expect(received).toEqual([0, 1, 2]);
     expect(progress.length).toBeGreaterThan(0);
     expect(completes).toContain(transferId);
+    expect(receivedPayloads.join('')).toBe('AAABBBCCC');
+    wsA.close(); wsB.close();
+  });
+
+  it('stage D: checksum mismatch prevents completion', async () => {
+    const { a, b, wsA, wsB, sessionId } = await setupSession();
+    const chunks = ['AAA', 'BBB', 'CCC'];
+    const transferId = 'fd-' + Date.now();
+    const errors = [];
+    const completes = [];
+    wsA.on('message', (data) => {
+      const m = JSON.parse(data.toString());
+      if (m.type === 'file_transfer_request') {
+        wsA.send(JSON.stringify({ type: 'file_transfer_consent', transferId: m.transferId }));
+      }
+      if (m.type === 'file_transfer_complete') completes.push(m.transferId);
+    });
+    wsB.on('message', (data) => {
+      const m = JSON.parse(data.toString());
+      if (m.type === 'file_transfer_error') errors.push(m.error);
+      if (m.type === 'file_transfer_consent') {
+        chunks.forEach((c, i) => {
+          const isFinal = i === chunks.length - 1;
+          wsB.send(JSON.stringify({ type: 'file_chunk', transferId, sessionId, targetDeviceId: a.deviceId, sequence: i, totalChunks: chunks.length, payload: c, isFinal, checksum: isFinal ? 'wrong' : 'ok' }));
+        });
+      }
+    });
+
+    wsB.send(JSON.stringify({ type: 'file_transfer_request', transferId, sessionId, recipientDeviceId: a.deviceId, filename: 'f.bin', size: 9, totalChunks: chunks.length, checksum: 'ok' }));
+
+    await new Promise((r) => setTimeout(r, 2000));
+    expect(errors).toContain('checksum_mismatch');
+    expect(completes).not.toContain(transferId);
     wsA.close(); wsB.close();
   });
 });
