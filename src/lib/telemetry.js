@@ -1,3 +1,5 @@
+const ALLOWED = ['cpu', 'memory', 'disk', 'network', 'uptime', 'platform', 'processes'];
+
 export function collectTelemetry() {
   return {
     cpu: Math.random() * 100,
@@ -9,5 +11,21 @@ export function collectTelemetry() {
     processes: []
   };
 }
-export function sanitizeTelemetry(t) { const { token, password, secret, env, privateKey, ...rest } = t || {}; return rest; }
-EOF
+
+export function sanitizeTelemetry(t) {
+  if (!t || typeof t !== 'object' || Array.isArray(t)) return {};
+  const out = {};
+  for (const key of ALLOWED) {
+    if (Object.prototype.hasOwnProperty.call(t, key)) {
+      const v = t[key];
+      if (key === 'platform') {
+        out[key] = typeof v === 'string' ? v.slice(0, 64) : '';
+      } else if (key === 'processes') {
+        out[key] = Array.isArray(v) ? v.slice(0, 50) : [];
+      } else {
+        out[key] = typeof v === 'number' && Number.isFinite(v) ? v : 0;
+      }
+    }
+  }
+  return out;
+}
