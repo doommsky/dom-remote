@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn } from 'node:child_process';
+import { open } from '../server/node_modules/sqlite/build/index.js';
+import sqlite3 from '../server/node_modules/sqlite3/lib/sqlite3.js';
 
 describe('device deletion', () => {
   let proc;
@@ -34,6 +36,8 @@ describe('device deletion', () => {
     expect(r.status).toBe(200);
     const j = await r.json();
     expect(j.success).toBe(true);
+    const r2 = await fetch('http://localhost:' + port + '/api/devices/' + d.deviceId, { method: 'GET', headers: { Authorization: 'Bearer ' + token } });
+    expect(r2.status).toBe(404);
   });
 
   it('cross-user delete returns 404', async () => {
@@ -48,5 +52,32 @@ describe('device deletion', () => {
     const { token } = await register('miss' + Date.now() + '@t.com');
     const r = await fetch('http://localhost:' + port + '/api/devices/nonexistent', { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
     expect(r.status).toBe(404);
+  });
+
+  it('invalid device id returns 404', async () => {
+    const { token } = await register('inv' + Date.now() + '@t.com');
+    const r = await fetch('http://localhost:' + port + '/api/devices/%00', { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    expect([400, 404]).toContain(r.status);
+  });
+
+  it('deleting device cancels associated sessions', async () => {
+    const { token } = await register('sess' + Date.now() + '@t.com');
+    const a = await regDevice(token, 'host');
+    const b = await regDevice(token, 'client');
+    const db = await open({ filename: 'dom-os.db', driver: sqlite3.Database });
+    const sessionId = 'sess-' + Date.now();
+    await db.run('INSERT INTO sessions (id, host_device_id, client_device_id, started_at, status) VALUES (?, ?, ?, ?, ?)', [sessionId, a.deviceId, b.deviceId, Date.now(), 'active']);
+
+    const r = await fetch('http://localhost:' + port + '/api/devices/' + a.deviceId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    expect(r.status).toBe(200);
+
+    const after = await db.get('SELECT status, ended_at FROM sessions WHERE id = ?', [sessionId]);
+    expect(after.status).toBe('cancelled');
+    expect(after.ended_at).not.toBeNull();
+
+    const r2 = await fetch('http://localhost:' + port + '/api/devices/' + a.deviceId, { method: 'GET', headers: { Authorization: 'Bearer ' + token } });
+    expect(r2.status).toBe(404);
+
+    await db.close();
   });
 });

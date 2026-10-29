@@ -10,6 +10,7 @@ import cors from 'cors';
 import { expireStaleSessions } from './sessionCleanup.js';
 import * as FT from './fileTransfer.js';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -72,8 +73,8 @@ async function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
-      host_device_id TEXT NOT NULL,
-      client_device_id TEXT NOT NULL,
+      host_device_id TEXT,
+      client_device_id TEXT,
       started_at INTEGER NOT NULL,
       ended_at INTEGER,
       status TEXT DEFAULT 'active',
@@ -81,10 +82,20 @@ async function initDatabase() {
       FOREIGN KEY (client_device_id) REFERENCES devices(id)
     );
 
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT NOT NULL UNIQUE,
+      user_id TEXT NOT NULL,
+      device_id TEXT,
+      expires_at INTEGER NOT NULL,
+      revoked INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS connection_history (
       id TEXT PRIMARY KEY,
-      host_device_id TEXT NOT NULL,
-      client_device_id TEXT NOT NULL,
+      host_device_id TEXT,
+      client_device_id TEXT,
       connected_at INTEGER NOT NULL,
       disconnected_at INTEGER,
       duration INTEGER,
@@ -104,6 +115,27 @@ function verifyToken(token) {
   } catch {
     return null;
   }
+}
+
+function generateRefreshToken() { return crypto.randomBytes(48).toString('hex'); }
+function hashToken(raw) { return crypto.createHash('sha256').update(raw).digest('hex'); }
+async function storeRefreshToken(db, raw, userId, deviceId) {
+  const hash = hashToken(raw);
+  const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  await db.run('INSERT INTO refresh_tokens (token_hash, user_id, device_id, expires_at, revoked, created_at) VALUES (?, ?, ?, ?, 0, ?)', [hash, userId, deviceId, expiresAt, Date.now()]);
+}
+async function verifyRefreshToken(db, rawToken) {
+  if (typeof rawToken !== 'string' || rawToken.length < 32) return null;
+  const hash = hashToken(rawToken);
+  const row = await db.get('SELECT * FROM refresh_tokens WHERE token_hash = ? AND revoked = 0', [hash]);
+  if (!row) return null;
+  if (Date.now() > row.expires_at) return null;
+  return { userId: row.user_id, deviceId: row.device_id, rowId: row.id };
+}
+async function revokeRefreshToken(db, rawToken) {
+  if (typeof rawToken !== 'string') return;
+  const hash = hashToken(rawToken);
+  await db.run('UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?', [hash]);
 }
 
 const server = createServer(app);
@@ -505,7 +537,9 @@ app.post('/api/auth/register', async (req, res) => {
     await db.run('INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)', [userId, email, passwordHash, now]);
 
     const token = generateToken(userId);
-    res.json({ token, userId });
+    const refreshToken = generateRefreshToken();
+    await storeRefreshToken(db, refreshToken, userId, '');
+    res.json({ token, refreshToken, userId });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -531,7 +565,9 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = generateToken(user.id);
-    res.json({ token, userId: user.id });
+    const refreshToken = generateRefreshToken();
+    await storeRefreshToken(db, refreshToken, user.id, '');
+    res.json({ token, refreshToken, userId: user.id });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -693,6 +729,38 @@ app.get('/api/health', (req, res) => {
 async function main() {
   await initDatabase();
   console.log('Database initialized');
+
+app.post('/api/auth/refresh', async (req, res) => {
+  const { refreshToken } = req.body || {};
+  if (typeof refreshToken !== 'string') {
+    return res.status(400).json({ error: 'Invalid refresh token' });
+  }
+  const info = await verifyRefreshToken(db, refreshToken);
+  if (!info) {
+    auditLog('refresh_rejected', { reason: 'invalid' });
+    return res.status(401).json({ error: 'Invalid refresh token' });
+  }
+  await revokeRefreshToken(db, refreshToken);
+  const newAccess = generateToken(info.userId);
+  const newRefresh = generateRefreshToken();
+  await storeRefreshToken(db, newRefresh, info.userId, info.deviceId || '');
+  auditLog('refresh_success', { userId: info.userId });
+  res.json({ token: newAccess, refreshToken: newRefresh });
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = authHeader.slice(7);
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  auditLog('logout', { userId: decoded.userId });
+  res.json({ success: true });
+});
 
   server.listen(PORT, () => {
     console.log(`DOM-OS Signaling Server running on port ${PORT}`);
