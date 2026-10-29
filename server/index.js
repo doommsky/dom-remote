@@ -218,9 +218,7 @@ wss.on('connection', (ws, req) => {
         case 'answer':
         case 'ice-candidate':
         case 'telemetry':
-        case 'file_transfer':
-        case 'file_chunk':
-        case 'file_cancel': {
+        case 'file_transfer': {
           if (!ws.authenticated) break;
           
           const targetDeviceId = message.targetDeviceId;
