@@ -515,7 +515,8 @@ wss.on('connection', (ws, req) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
-  if (!rateLimit('reg:' + (req.ip || 'x'), 5, 60000)) return res.status(429).json({ error: 'Too many requests' });
+  const regLimit = process.env.NODE_ENV === 'test' ? 1000 : 5;
+  if (!rateLimit('reg:' + (req.ip || 'x'), regLimit, 60000)) return res.status(429).json({ error: 'Too many requests' });
   try {
     const { email, password } = req.body || {};
     if (typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) {
@@ -547,7 +548,8 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  if (!rateLimit('login:' + (req.ip || 'x'), 10, 60000)) return res.status(429).json({ error: 'Too many requests' });
+  const loginLimit = process.env.NODE_ENV === 'test' ? 1000 : 10;
+  if (!rateLimit('login:' + (req.ip || 'x'), loginLimit, 60000)) return res.status(429).json({ error: 'Too many requests' });
   try {
     const { email, password } = req.body || {};
     if (typeof email !== 'string' || typeof password !== 'string') {
