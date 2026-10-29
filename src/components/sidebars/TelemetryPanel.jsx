@@ -2,7 +2,7 @@ import React from 'react';
 export default function TelemetryPanel({ metrics }) {
   return (
     <section>
-      <h3>Telemetry</h3>
+      <h3>Telemetry (simulated)</h3>
       <div>CPU: {metrics?.cpu}</div>
       <div>Memory: {metrics?.memory}</div>
       <div>Disk: {metrics?.disk}</div>
@@ -12,4 +12,3 @@ export default function TelemetryPanel({ metrics }) {
     </section>
   );
 }
-EOF
