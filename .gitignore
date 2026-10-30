@@ -12,3 +12,9 @@ diag-*.ps1
 find-*.ps1
 
 dom-os.db
+
+# Local agent working files
+.kilo/
+.opencode/openwork/inbox/
+p2.js
+

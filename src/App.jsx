@@ -1,145 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { signaling, webrtc, api, generateDeviceId, getDeviceInfo } from './lib/webrtc';
+import { startFileTransfer, computeTotalChunks, computeChecksum } from './lib/fileTransfer';
+import AppShell from './components/layout/AppShell';
+import DevicePanel from './components/devices/DevicePanel';
+import RemoteViewPanel from './components/remote/RemoteViewPanel';
+import TelemetryPanel from './components/sidebars/TelemetryPanel';
+import FileTransferPanel from './components/sidebars/FileTransferPanel';
+import { DESIGN_SYSTEM, Card, Button, StatusIndicator, Header, DeviceCard, SessionCard } from './components/shared/ui';
 
-const DESIGN_SYSTEM = {
-  background: '#080D19',
-  surface: '#0C1322',
-  raised: '#151B2D',
-  control: '#1A2135',
-  border: '#293650',
-  primaryPurple: '#A855F7',
-  brightViolet: '#C084FC',
-  lavender: '#B99AFF',
-  blue: '#3B82F6',
-  onlineGreen: '#39F59B',
-  amber: '#F59E0B',
-  errorRed: '#FF334D',
-  text: '#F4F5FF',
-  textSecondary: '#C0C9DB',
-  mutedGrey: '#8E9AB2',
-  fontFamily: "'Inter', 'system-ui', sans-serif",
-  fontSize: '14px',
-  fontWeightRegular: 400,
-  fontWeightMedium: 500,
-  fontWeightBold: 700,
-  borderRadius: '16px',
-  borderWidth: '1px',
-  borderColor: '#293650',
-  shadow: '0 10px 26px rgba(0, 0, 0, 0.24)',
-  spacingSmall: '4px',
-  spacingMedium: '8px',
-  spacingLarge: '16px',
-  spacingXLarge: '24px',
-};
 
-const StatusIndicator = ({ online, connecting }) => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    style={{
-      color: connecting ? DESIGN_SYSTEM.primaryPurple : (online ? DESIGN_SYSTEM.onlineGreen : DESIGN_SYSTEM.mutedGrey),
-      width: 20,
-      height: 20,
-      animation: connecting ? 'pulse 1s infinite' : 'none',
-    }}
-  >
-    <style jsx>{`
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-      }
-    `}</style>
-    <path d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2zm0 2c-3.309 0-6 2.691-6 6s2.691 6 6 6s6-2.691 6-6s-2.691-6-6-6zm0 9.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-  </svg>
-);
 
-const Header = ({ title, subtitle, actions }) => (
-  <header style={{ 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    marginBottom: DESIGN_SYSTEM.spacingXLarge 
-  }}>
-    <div>
-      <h1 style={{
-        fontFamily: DESIGN_SYSTEM.fontFamily,
-        fontSize: '20px',
-        fontWeight: DESIGN_SYSTEM.fontWeightBold,
-        margin: 0,
-        color: DESIGN_SYSTEM.onlineGreen,
-      }}>
-        {title}
-      </h1>
-      {subtitle && (
-        <p style={{
-          fontFamily: DESIGN_SYSTEM.fontFamily,
-          fontSize: '12px',
-          color: DESIGN_SYSTEM.mutedGrey,
-          margin: '4px 0 0 0',
-        }}>
-          {subtitle}
-        </p>
-      )}
-    </div>
-    {actions && <div style={{ display: 'flex', gap: DESIGN_SYSTEM.spacingSmall }}>{actions}</div>}
-  </header>
-);
 
-const Card = ({ children, style = {}, className }) => (
-  <div style={{
-    backgroundColor: DESIGN_SYSTEM.surface,
-    borderRadius: DESIGN_SYSTEM.borderRadius,
-    border: `1px solid rgba(128, 128, 128, 0.2)`,
-    padding: DESIGN_SYSTEM.spacingLarge,
-    ...style,
-  }} className={className}>
-    {children}
-  </div>
-);
 
-const Button = ({ children, onClick, variant = 'primary', disabled, loading, style = {}, ...props }) => {
-  const baseStyle = {
-    fontFamily: DESIGN_SYSTEM.fontFamily,
-    fontSize: '13px',
-    fontWeight: DESIGN_SYSTEM.fontWeightMedium,
-    cursor: disabled || loading ? 'not-allowed' : 'pointer',
-    padding: DESIGN_SYSTEM.spacingSmall,
-    borderRadius: '6px',
-    border: 'none',
-    transition: 'background-color 150ms ease',
-    opacity: disabled || loading ? 0.6 : 1,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
-    ...style,
-  };
 
-  const variants = {
-    primary: { backgroundColor: DESIGN_SYSTEM.primaryPurple, color: '#FFFFFF' },
-    secondary: { background: 'none', color: DESIGN_SYSTEM.onlineGreen, border: 'none' },
-    danger: { background: 'none', color: DESIGN_SYSTEM.errorRed, border: `1px solid ${DESIGN_SYSTEM.errorRed}` },
-    ghost: { background: 'none', color: DESIGN_SYSTEM.mutedGrey, border: '1px solid rgba(128, 128, 128, 0.3)' },
-    success: { backgroundColor: DESIGN_SYSTEM.onlineGreen, color: '#0B0D18' },
-  };
 
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled || loading}
-      style={{ ...baseStyle, ...variants[variant] }}
-      {...props}
-    >
-      {loading && <span style={{ width: 14, height: 14, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
-      {children}
-      <style jsx>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-    </button>
-  );
-};
+
+
+
 
 const Input = ({ value, onChange, placeholder, type = 'text', style = {}, ...props }) => (
   <input
@@ -205,57 +82,9 @@ const Toggle = ({ label, checked, onChange, description }) => (
   </label>
 );
 
-const DeviceCard = ({ device, isCurrent, onConnect, onSettings, onRevoke, connecting }) => (
-  <Card style={{ marginBottom: DESIGN_SYSTEM.spacingMedium, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: DESIGN_SYSTEM.spacingMedium }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: DESIGN_SYSTEM.spacingMedium, flex: 1 }}>
-      <StatusIndicator online={device.last_seen && Date.now() - device.last_seen < 60000} connecting={connecting} />
-      <div>
-        <div style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '14px', fontWeight: DESIGN_SYSTEM.fontWeightMedium, color: DESIGN_SYSTEM.onlineGreen }}>
-          {device.name} {isCurrent && <span style={{ fontSize: '10px', color: DESIGN_SYSTEM.primaryPurple, marginLeft: '6px' }}>(this device)</span>}
-        </div>
-        <div style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '11px', color: DESIGN_SYSTEM.mutedGrey }}>
-          {device.type} · {device.platform} · {device.remote_access_enabled ? 'Remote access ON' : 'Remote access OFF'}
-        </div>
-      </div>
-    </div>
-    <div style={{ display: 'flex', gap: DESIGN_SYSTEM.spacingSmall }}>
-      {device.remote_access_enabled && !isCurrent && (
-        <Button variant="primary" onClick={() => onConnect(device.id)} disabled={connecting} size="sm">
-          Connect
-        </Button>
-      )}
-      <Button variant="ghost" onClick={() => onSettings(device)} size="sm">Settings</Button>
-      {!isCurrent && (
-        <Button variant="danger" onClick={() => onRevoke(device.id)} size="sm">Revoke</Button>
-      )}
-    </div>
-  </Card>
-);
 
-const SessionCard = ({ session, onAccept, onReject, onEnd }) => (
-  <Card style={{ borderColor: DESIGN_SYSTEM.primaryPurple, animation: 'slideIn 0.3s ease' }}>
-    <style jsx>{`
-      @keyframes slideIn {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-    `}</style>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div>
-        <div style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '14px', fontWeight: DESIGN_SYSTEM.fontWeightBold, color: DESIGN_SYSTEM.onlineGreen }}>
-          Incoming Connection
-        </div>
-        <div style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey }}>
-          {session.clientName} wants to connect
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: DESIGN_SYSTEM.spacingSmall }}>
-        <Button variant="success" onClick={() => onAccept(session.sessionId)}>Accept</Button>
-        <Button variant="danger" onClick={() => onReject(session.sessionId)}>Reject</Button>
-      </div>
-    </div>
-  </Card>
-);
+
+
 
 function AuthScreen({ onAuth }) {
   const [mode, setMode] = useState('login');
@@ -316,68 +145,98 @@ function AuthScreen({ onAuth }) {
   );
 }
 
-function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError }) {
+function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError, telemetryMetrics, telemetryLoading, telemetryError, telemetryConnected, transferId, transferFilename, transferSize, transferStatus, transferProgress, transferError, connection }) {
   const onlineDevices = devices.filter(d => d.last_seen && Date.now() - d.last_seen < 60000);
   const offlineDevices = devices.filter(d => !d.last_seen || Date.now() - d.last_seen >= 60000);
+  const [transferTargetDevice, setTransferTargetDevice] = useState('');
+  const [transferFile, setTransferFile] = useState(null);
 
   return (
-    <main style={{ backgroundColor: DESIGN_SYSTEM.background, color: DESIGN_SYSTEM.onlineGreen, minHeight: '100vh', fontFamily: DESIGN_SYSTEM.fontFamily }}>
-      <div style={{ maxWidth: '600px', padding: DESIGN_SYSTEM.spacingXLarge, margin: '0 auto' }}>
-        <Header 
-          title="DOM Remote" 
-          subtitle="Your devices" 
-          actions={<Button variant="ghost" onClick={onAddDevice} size="sm">+ Add Device</Button>}
+    <AppShell
+      left={
+        <DevicePanel
+          devices={devices}
+          currentDeviceId={currentDeviceId}
+          onConnect={onConnect}
+          onSettings={onSettings}
+          onRevoke={onRevoke}
+          connectingDevice={connectingDevice}
         />
-
-        {error && <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #EF4444', borderRadius: '4px', padding: DESIGN_SYSTEM.spacingMedium, marginBottom: DESIGN_SYSTEM.spacingMedium, color: DESIGN_SYSTEM.errorRed, fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{error}</span><Button variant="secondary" onClick={onClearError} size="sm">Dismiss</Button></div>}
-
-        {incomingSession && <SessionCard session={incomingSession} onAccept={onAcceptSession} onReject={onRejectSession} />}
-
-        <Card style={{ marginBottom: DESIGN_SYSTEM.spacingLarge }}>
-          <h3 style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '14px', fontWeight: DESIGN_SYSTEM.fontWeightMedium, color: DESIGN_SYSTEM.primaryPurple, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: DESIGN_SYSTEM.primaryPurple }}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 2c-3.87 0-7 3.13-7 7v5h10v-5c0-3.87-3.13-7-7-7zm0 9.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/></svg>
-            Online Devices ({onlineDevices.length})
-          </h3>
-          {onlineDevices.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: DESIGN_SYSTEM.spacingXLarge, color: DESIGN_SYSTEM.mutedGrey }}>
-              <p>No devices online</p>
-              <p style={{ fontSize: '12px', marginTop: '4px' }}>Enable remote access on your devices to see them here</p>
-            </div>
-          ) : (
-            onlineDevices.map(device => (
-              <DeviceCard 
-                key={device.id} 
-                device={device} 
-                isCurrent={device.id === currentDeviceId}
-                onConnect={onConnect}
-                onSettings={onSettings}
-                onRevoke={onRevoke}
-                connecting={connectingDevice === device.id}
-              />
-            ))
+      }
+      center={
+        <>
+          <RemoteViewPanel
+            error={error}
+            onClearError={onClearError}
+            incomingSession={incomingSession}
+            onAcceptSession={onAcceptSession}
+            onRejectSession={onRejectSession}
+            onAddDevice={onAddDevice}
+          />
+          <div style={{ maxWidth: '600px', padding: DESIGN_SYSTEM.spacingXLarge, margin: '0 auto' }}>
+            <Card style={{ marginBottom: DESIGN_SYSTEM.spacingLarge }}>
+              <h3 style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '14px', fontWeight: DESIGN_SYSTEM.fontWeightMedium, color: DESIGN_SYSTEM.primaryPurple, margin: '0 0 16px 0' }}>Send File</h3>
+              <div style={{ marginBottom: DESIGN_SYSTEM.spacingMedium }}>
+                <label style={{ display: 'block', fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey, marginBottom: '6px' }}>Target Device</label>
+                <select value={transferTargetDevice} onChange={(e) => setTransferTargetDevice(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', backgroundColor: DESIGN_SYSTEM.background, color: DESIGN_SYSTEM.onlineGreen, border: `1px solid rgba(128,128,128,0.3)` }}>
+                  <option value="">Select device</option>
+                  {devices.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: DESIGN_SYSTEM.spacingMedium }}>
+                <label style={{ display: 'block', fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey, marginBottom: '6px' }}>Session</label>
+                <div style={{ fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey }}>{connection?.sessionId ? connection.sessionId : 'No active session'}</div>
+              </div>
+              <div style={{ marginBottom: DESIGN_SYSTEM.spacingMedium }}>
+                <label style={{ display: 'block', fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey, marginBottom: '6px' }}>File</label>
+                <input type="file" onChange={(e) => setTransferFile(e.target.files?.[0] ?? null)} />
+              </div>
+              <Button
+                variant="primary"
+                disabled={!connection?.sessionId || !transferTargetDevice || !transferFile}
+                onClick={async () => {
+                  if (!connection?.sessionId || !transferTargetDevice || !transferFile) return;
+                  const totalChunks = computeTotalChunks(transferFile);
+                  const checksum = await computeChecksum(transferFile);
+                  startFileTransfer({
+                    sessionId: connection.sessionId,
+                    recipientDeviceId: transferTargetDevice,
+                    filename: transferFile.name,
+                    size: transferFile.size,
+                    totalChunks,
+                    checksum,
+                  });
+                }}
+              >
+                Start Transfer
+              </Button>
+            </Card>
+          </div>
+        </>
+      }
+      right={
+        <>
+          <TelemetryPanel
+            metrics={telemetryMetrics}
+            loading={telemetryLoading}
+            error={telemetryError}
+            connected={telemetryConnected}
+          />
+          {transferStatus !== 'idle' && (
+            <FileTransferPanel
+              transferId={transferId}
+              filename={transferFilename}
+              size={transferSize}
+              progress={transferProgress}
+              status={transferStatus}
+              error={transferError}
+            />
           )}
-        </Card>
-
-        {offlineDevices.length > 0 && (
-          <Card>
-            <h3 style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '14px', fontWeight: DESIGN_SYSTEM.fontWeightMedium, color: DESIGN_SYSTEM.primaryPurple, margin: '0 0 16px 0' }}>
-              Offline Devices ({offlineDevices.length})
-            </h3>
-            {offlineDevices.map(device => (
-              <DeviceCard 
-                key={device.id} 
-                device={device} 
-                isCurrent={device.id === currentDeviceId}
-                onConnect={onConnect}
-                onSettings={onSettings}
-                onRevoke={onRevoke}
-                connecting={false}
-              />
-            ))}
-          </Card>
-        )}
-      </div>
-    </main>
+        </>
+      }
+    />
   );
 }
 
@@ -628,6 +487,16 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [error, setError] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [telemetryMetrics, setTelemetryMetrics] = useState(null);
+  const [telemetryLoading, setTelemetryLoading] = useState(false);
+  const [telemetryError, setTelemetryError] = useState(null);
+  const [telemetryConnected, setTelemetryConnected] = useState(false);
+  const [transferId, setTransferId] = useState(null);
+  const [transferFilename, setTransferFilename] = useState(null);
+  const [transferSize, setTransferSize] = useState(0);
+  const [transferProgress, setTransferProgress] = useState(0);
+  const [transferStatus, setTransferStatus] = useState('idle');
+  const [transferError, setTransferError] = useState(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -690,6 +559,34 @@ export default function App() {
       localStorage.clear();
       window.location.reload();
     });
+    const unsubTelemetry = signaling.on('telemetry', (msg) => {
+      setTelemetryMetrics(msg?.metrics ?? msg ?? null);
+      setTelemetryLoading(false);
+      setTelemetryError(null);
+      setTelemetryConnected(true);
+    });
+    const unsubTransferProgress = signaling.on('file_transfer_progress', (msg) => {
+      setTransferId(msg?.transferId ?? null);
+      setTransferFilename(msg?.filename ?? null);
+      setTransferSize(msg?.totalBytes ?? 0);
+      setTransferProgress(msg?.percent ?? 0);
+      setTransferStatus('active');
+      setTransferError(null);
+    });
+    const unsubTransferComplete = signaling.on('file_transfer_complete', (msg) => {
+      setTransferId(msg?.transferId ?? null);
+      setTransferProgress(100);
+      setTransferStatus('completed');
+      setTransferError(null);
+    });
+    const unsubTransferError = signaling.on('file_transfer_error', (msg) => {
+      setTransferStatus('failed');
+      setTransferError(msg?.error ?? 'Transfer failed');
+    });
+    const unsubTransferCancel = signaling.on('file_transfer_cancel', (msg) => {
+      setTransferStatus('cancelled');
+      setTransferError(null);
+    });
 
     webrtc.on('remote_stream', ({ deviceId, stream }) => {
       setRemoteStream(stream);
@@ -712,6 +609,11 @@ export default function App() {
       unsubError();
       unsubHistory();
       unsubRevoked();
+      unsubTelemetry();
+      unsubTransferProgress();
+      unsubTransferComplete();
+      unsubTransferError();
+      unsubTransferCancel();
       signaling.disconnect();
       webrtc.cleanupAll();
     };
@@ -850,5 +752,14 @@ export default function App() {
     onRejectSession={handleRejectSession}
     error={error}
     onClearError={clearError}
+    telemetryMetrics={telemetryMetrics}
+    telemetryLoading={telemetryLoading}
+    telemetryError={telemetryError}
+    telemetryConnected={telemetryConnected}
+    transferId={transferId}
+    transferFilename={transferFilename}
+    transferSize={transferSize}
+    transferStatus={transferStatus}
+    connection={connection}
   />;
 }
