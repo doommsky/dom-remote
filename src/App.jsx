@@ -183,6 +183,9 @@ function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSett
               transferId={transferId}
               filename={transferFilename}
               size={transferSize}
+              progress={transferProgress}
+              status={transferStatus}
+              error={transferError}
             />
           )}
         </>
