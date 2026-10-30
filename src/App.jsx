@@ -4,6 +4,7 @@ import AppShell from './components/layout/AppShell';
 import DevicePanel from './components/devices/DevicePanel';
 import RemoteViewPanel from './components/remote/RemoteViewPanel';
 import TelemetryPanel from './components/sidebars/TelemetryPanel';
+import FileTransferPanel from './components/sidebars/FileTransferPanel';
 import { DESIGN_SYSTEM, Card, Button, StatusIndicator, Header, DeviceCard, SessionCard } from './components/shared/ui';
 
 
@@ -143,7 +144,7 @@ function AuthScreen({ onAuth }) {
   );
 }
 
-function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError, telemetryMetrics, telemetryLoading, telemetryError, telemetryConnected }) {
+function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError, telemetryMetrics, telemetryLoading, telemetryError, telemetryConnected, transferId, transferFilename, transferSize, transferStatus }) {
   const onlineDevices = devices.filter(d => d.last_seen && Date.now() - d.last_seen < 60000);
   const offlineDevices = devices.filter(d => !d.last_seen || Date.now() - d.last_seen >= 60000);
 
@@ -170,12 +171,21 @@ function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSett
         />
       }
       right={
-        <TelemetryPanel
-          metrics={telemetryMetrics}
-          loading={telemetryLoading}
-          error={telemetryError}
-          connected={telemetryConnected}
-        />
+        <>
+          <TelemetryPanel
+            metrics={telemetryMetrics}
+            loading={telemetryLoading}
+            error={telemetryError}
+            connected={telemetryConnected}
+          />
+          {transferStatus !== 'idle' && (
+            <FileTransferPanel
+              transferId={transferId}
+              filename={transferFilename}
+              size={transferSize}
+            />
+          )}
+        </>
       }
     />
   );
@@ -697,5 +707,9 @@ export default function App() {
     telemetryLoading={telemetryLoading}
     telemetryError={telemetryError}
     telemetryConnected={telemetryConnected}
+    transferId={transferId}
+    transferFilename={transferFilename}
+    transferSize={transferSize}
+    transferStatus={transferStatus}
   />;
 }
