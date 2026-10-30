@@ -432,6 +432,12 @@ export default function App() {
   const [telemetryLoading, setTelemetryLoading] = useState(false);
   const [telemetryError, setTelemetryError] = useState(null);
   const [telemetryConnected, setTelemetryConnected] = useState(false);
+  const [transferId, setTransferId] = useState(null);
+  const [transferFilename, setTransferFilename] = useState(null);
+  const [transferSize, setTransferSize] = useState(0);
+  const [transferProgress, setTransferProgress] = useState(0);
+  const [transferStatus, setTransferStatus] = useState('idle');
+  const [transferError, setTransferError] = useState(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -500,6 +506,28 @@ export default function App() {
       setTelemetryError(null);
       setTelemetryConnected(true);
     });
+    const unsubTransferProgress = signaling.on('file_transfer_progress', (msg) => {
+      setTransferId(msg?.transferId ?? null);
+      setTransferFilename(msg?.filename ?? null);
+      setTransferSize(msg?.totalBytes ?? 0);
+      setTransferProgress(msg?.percent ?? 0);
+      setTransferStatus('active');
+      setTransferError(null);
+    });
+    const unsubTransferComplete = signaling.on('file_transfer_complete', (msg) => {
+      setTransferId(msg?.transferId ?? null);
+      setTransferProgress(100);
+      setTransferStatus('completed');
+      setTransferError(null);
+    });
+    const unsubTransferError = signaling.on('file_transfer_error', (msg) => {
+      setTransferStatus('failed');
+      setTransferError(msg?.error ?? 'Transfer failed');
+    });
+    const unsubTransferCancel = signaling.on('file_transfer_cancel', (msg) => {
+      setTransferStatus('cancelled');
+      setTransferError(null);
+    });
 
     webrtc.on('remote_stream', ({ deviceId, stream }) => {
       setRemoteStream(stream);
@@ -523,6 +551,10 @@ export default function App() {
       unsubHistory();
       unsubRevoked();
       unsubTelemetry();
+      unsubTransferProgress();
+      unsubTransferComplete();
+      unsubTransferError();
+      unsubTransferCancel();
       signaling.disconnect();
       webrtc.cleanupAll();
     };
