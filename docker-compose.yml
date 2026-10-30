@@ -1,9 +1,60 @@
 version: '3.8'
+
 services:
-  api:
-    build: .
+  signaling:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
     ports:
       - "3001:3001"
-    env_file:
-      - .env
+    environment:
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET:-dom-os-secret-change-in-production}
+      - NODE_ENV=production
+    volumes:
+      - ./server/dom-os.db:/app/dom-os.db
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  coturn:
+    image: coturn/coturn:latest
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      - "49152-65535:49152-65535/udp"
+    environment:
+      - TURN_SERVER_NAME=turn.dom-os.local
+      - TURN_REALM=dom-os.local
+      - TURN_USERNAME=domos
+      - TURN_PASSWORD=${TURN_PASSWORD:-changeme}
+      - TURN_MIN_PORT=49152
+      - TURN_MAX_PORT=65535
+      - TURN_EXTERNAL_IP=${EXTERNAL_IP:-auto}
+    command: >
+      -n
+      --no-cli
+      --no-tls
+      --no-dtls
+      --verbose
+      --user=${TURN_USERNAME}:${TURN_PASSWORD}
+      --realm=${TURN_REALM}
+      --min-port=49152
+      --max-port=65535
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
