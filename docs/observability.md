@@ -2,8 +2,8 @@
 
 - Structured JSON logs via auditLog.
 - /health endpoint returns status.
-- Error tracking hook placeholder: SENTRY_DSN env var.
-- Alert webhook placeholder: ALERT_WEBHOOK_URL.
+- Error tracking provider: Sentry (SENTRY_DSN).
+- Alert destination: Slack incoming webhook (SLACK_WEBHOOK_URL / ALERT_WEBHOOK_URL).
 
 ## Alert thresholds
 - Error rate > 5% for 5m
