@@ -3,6 +3,7 @@ import { signaling, webrtc, api, generateDeviceId, getDeviceInfo } from './lib/w
 import AppShell from './components/layout/AppShell';
 import DevicePanel from './components/devices/DevicePanel';
 import RemoteViewPanel from './components/remote/RemoteViewPanel';
+import TelemetryPanel from './components/sidebars/TelemetryPanel';
 import { DESIGN_SYSTEM, Card, Button, StatusIndicator, Header, DeviceCard, SessionCard } from './components/shared/ui';
 
 
@@ -142,7 +143,7 @@ function AuthScreen({ onAuth }) {
   );
 }
 
-function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError }) {
+function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError, telemetryMetrics, telemetryLoading, telemetryError, telemetryConnected }) {
   const onlineDevices = devices.filter(d => d.last_seen && Date.now() - d.last_seen < 60000);
   const offlineDevices = devices.filter(d => !d.last_seen || Date.now() - d.last_seen >= 60000);
 
@@ -168,7 +169,14 @@ function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSett
           onAddDevice={onAddDevice}
         />
       }
-      right={null}
+      right={
+        <TelemetryPanel
+          metrics={telemetryMetrics}
+          loading={telemetryLoading}
+          error={telemetryError}
+          connected={telemetryConnected}
+        />
+      }
     />
   );
 }
@@ -420,6 +428,10 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [error, setError] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [telemetryMetrics, setTelemetryMetrics] = useState(null);
+  const [telemetryLoading, setTelemetryLoading] = useState(false);
+  const [telemetryError, setTelemetryError] = useState(null);
+  const [telemetryConnected, setTelemetryConnected] = useState(false);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -482,6 +494,12 @@ export default function App() {
       localStorage.clear();
       window.location.reload();
     });
+    const unsubTelemetry = signaling.on('telemetry', (msg) => {
+      setTelemetryMetrics(msg?.metrics ?? msg ?? null);
+      setTelemetryLoading(false);
+      setTelemetryError(null);
+      setTelemetryConnected(true);
+    });
 
     webrtc.on('remote_stream', ({ deviceId, stream }) => {
       setRemoteStream(stream);
@@ -504,6 +522,7 @@ export default function App() {
       unsubError();
       unsubHistory();
       unsubRevoked();
+      unsubTelemetry();
       signaling.disconnect();
       webrtc.cleanupAll();
     };
@@ -642,5 +661,9 @@ export default function App() {
     onRejectSession={handleRejectSession}
     error={error}
     onClearError={clearError}
+    telemetryMetrics={telemetryMetrics}
+    telemetryLoading={telemetryLoading}
+    telemetryError={telemetryError}
+    telemetryConnected={telemetryConnected}
   />;
 }
