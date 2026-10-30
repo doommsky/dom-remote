@@ -31,6 +31,16 @@ export function cancelFileTransfer(transferId) {
   currentTransferId = null;
 }
 
+export function computeTotalChunks(file, chunkSize = 65536) {
+  if (!file || !file.size) return 0;
+  return Math.ceil(file.size / chunkSize);
+}
+
+export async function computeChecksum(file) {
+  const buffer = await file.arrayBuffer();
+  const hash = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 export function handleServerMessage(msg) {
   if (msg.type === 'file_transfer_progress') {
     state = 'active';
