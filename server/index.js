@@ -13,6 +13,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 
 dotenv.config();
+const { sendSlackAlert, captureError } = require('./observability');
 
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? (console.error('JWT_SECRET required') , process.exit(1)) : 'dom-os-dev-secret-change-in-production');
@@ -787,6 +788,16 @@ app.post('/api/auth/logout', async (req, res) => {
 main().catch(err => {
   console.error('Failed to start server:', err);
   process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  captureError(err);
+  sendSlackAlert(`Uncaught exception: ${err?.message || err}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+  captureError(reason);
+  sendSlackAlert(`Unhandled rejection: ${reason?.message || reason}`);
 });
 
 process.on('SIGINT', async () => {
