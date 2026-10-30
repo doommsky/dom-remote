@@ -22,6 +22,8 @@ const app = express();
 app.use(cors({ origin: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',') }));
 app.use(express.json({ limit: '1mb' }));
 
+app.get('/health', (req, res) => res.json({ status: 'ok', ts: Date.now() }));
+
 const rateBuckets = new Map();
 function rateLimit(key, limit, windowMs) {
   const now = Date.now();
