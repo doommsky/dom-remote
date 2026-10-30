@@ -1,8 +1,14 @@
 # Deployment
 
+## Host
+Fly.io (app: dom-remote)
+
+## Deploy
+fly deploy
+
 ## Rollback
-- Revert commit: `git revert <sha>` then redeploy.
-- Or redeploy previous Docker image tag.
+- fly releases rollback
+- or git revert <sha> && fly deploy
 
 ## Env
-See `.env.example`.
+See `.env.example`. Set secrets via `fly secrets set`.
