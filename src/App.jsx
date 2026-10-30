@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { signaling, webrtc, api, generateDeviceId, getDeviceInfo } from './lib/webrtc';
+import { startFileTransfer, computeTotalChunks, computeChecksum } from './lib/fileTransfer';
 import AppShell from './components/layout/AppShell';
 import DevicePanel from './components/devices/DevicePanel';
 import RemoteViewPanel from './components/remote/RemoteViewPanel';
@@ -144,9 +145,11 @@ function AuthScreen({ onAuth }) {
   );
 }
 
-function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError, telemetryMetrics, telemetryLoading, telemetryError, telemetryConnected, transferId, transferFilename, transferSize, transferStatus }) {
+function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSettings, onRevoke, onAddDevice, connectingDevice, incomingSession, onAcceptSession, onRejectSession, error, onClearError, telemetryMetrics, telemetryLoading, telemetryError, telemetryConnected, transferId, transferFilename, transferSize, transferStatus, transferProgress, transferError, connection }) {
   const onlineDevices = devices.filter(d => d.last_seen && Date.now() - d.last_seen < 60000);
   const offlineDevices = devices.filter(d => !d.last_seen || Date.now() - d.last_seen >= 60000);
+  const [transferTargetDevice, setTransferTargetDevice] = useState('');
+  const [transferFile, setTransferFile] = useState(null);
 
   return (
     <AppShell
@@ -161,14 +164,57 @@ function HomeScreen({ userId, token, devices, currentDeviceId, onConnect, onSett
         />
       }
       center={
-        <RemoteViewPanel
-          error={error}
-          onClearError={onClearError}
-          incomingSession={incomingSession}
-          onAcceptSession={onAcceptSession}
-          onRejectSession={onRejectSession}
-          onAddDevice={onAddDevice}
-        />
+        <>
+          <RemoteViewPanel
+            error={error}
+            onClearError={onClearError}
+            incomingSession={incomingSession}
+            onAcceptSession={onAcceptSession}
+            onRejectSession={onRejectSession}
+            onAddDevice={onAddDevice}
+          />
+          <div style={{ maxWidth: '600px', padding: DESIGN_SYSTEM.spacingXLarge, margin: '0 auto' }}>
+            <Card style={{ marginBottom: DESIGN_SYSTEM.spacingLarge }}>
+              <h3 style={{ fontFamily: DESIGN_SYSTEM.fontFamily, fontSize: '14px', fontWeight: DESIGN_SYSTEM.fontWeightMedium, color: DESIGN_SYSTEM.primaryPurple, margin: '0 0 16px 0' }}>Send File</h3>
+              <div style={{ marginBottom: DESIGN_SYSTEM.spacingMedium }}>
+                <label style={{ display: 'block', fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey, marginBottom: '6px' }}>Target Device</label>
+                <select value={transferTargetDevice} onChange={(e) => setTransferTargetDevice(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', backgroundColor: DESIGN_SYSTEM.background, color: DESIGN_SYSTEM.onlineGreen, border: `1px solid rgba(128,128,128,0.3)` }}>
+                  <option value="">Select device</option>
+                  {devices.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: DESIGN_SYSTEM.spacingMedium }}>
+                <label style={{ display: 'block', fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey, marginBottom: '6px' }}>Session</label>
+                <div style={{ fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey }}>{connection?.sessionId ? connection.sessionId : 'No active session'}</div>
+              </div>
+              <div style={{ marginBottom: DESIGN_SYSTEM.spacingMedium }}>
+                <label style={{ display: 'block', fontSize: '12px', color: DESIGN_SYSTEM.mutedGrey, marginBottom: '6px' }}>File</label>
+                <input type="file" onChange={(e) => setTransferFile(e.target.files?.[0] ?? null)} />
+              </div>
+              <Button
+                variant="primary"
+                disabled={!connection?.sessionId || !transferTargetDevice || !transferFile}
+                onClick={async () => {
+                  if (!connection?.sessionId || !transferTargetDevice || !transferFile) return;
+                  const totalChunks = computeTotalChunks(transferFile);
+                  const checksum = await computeChecksum(transferFile);
+                  startFileTransfer({
+                    sessionId: connection.sessionId,
+                    recipientDeviceId: transferTargetDevice,
+                    filename: transferFile.name,
+                    size: transferFile.size,
+                    totalChunks,
+                    checksum,
+                  });
+                }}
+              >
+                Start Transfer
+              </Button>
+            </Card>
+          </div>
+        </>
       }
       right={
         <>
@@ -714,5 +760,6 @@ export default function App() {
     transferFilename={transferFilename}
     transferSize={transferSize}
     transferStatus={transferStatus}
+    connection={connection}
   />;
 }
